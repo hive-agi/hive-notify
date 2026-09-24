@@ -1,4 +1,4 @@
-{:paths ["src" "resources"]
+{:paths ["src"]
 
  ;; The private registry. Declared HERE, not only in a developer's user-level
  ;; deps.edn, so a cold clone and CI resolve hive-agi artifacts identically.
