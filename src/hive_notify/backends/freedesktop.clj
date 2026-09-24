@@ -66,9 +66,10 @@
 (defn ask!
   "Show `question` (body already escaped) with one button per choice and block
    until a button is clicked, the notification is dismissed, or `timeout-ms`
-   passes (the notification is then closed). Returns {:status :answered :raw id}
+   passes. On the deadline or an interrupt (another surface answered) the
+   notification is closed. Returns {:status :answered :raw id}
    | {:status :dismissed :reason n} | {:status :timed-out}
-   | {:status :unavailable}. Never throws."
+   | {:status :cancelled} | {:status :unavailable}. Never throws."
   [question app timeout-ms]
   (rescue {:status :unavailable}
     (with-open [conn (.build (DBusConnectionBuilder/forSessionBus))]
@@ -85,11 +86,16 @@
                                     (when (mine? id)
                                       (.complete result {:status :dismissed
                                                          :reason (.longValue ^Number reason)}))))]
-          (let [[id] (apply call! conn "Notify" "susssasa{sv}i"
-                            (notify-params question app timeout-ms))]
+          (let [[id]   (apply call! conn "Notify" "susssasa{sv}i"
+                              (notify-params question app timeout-ms))
+                close! #(rescue nil (call! conn "CloseNotification" "u" id))]
             (deliver nid (.longValue ^Number id))
             (try
               (.get result (long timeout-ms) TimeUnit/MILLISECONDS)
               (catch TimeoutException _
-                (rescue nil (call! conn "CloseNotification" "u" id))
-                {:status :timed-out}))))))))
+                (close!)
+                {:status :timed-out})
+              (catch InterruptedException _
+                (close!)
+                (.interrupt (Thread/currentThread))
+                {:status :cancelled}))))))))
