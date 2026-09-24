@@ -1,0 +1,77 @@
+name: ci
+
+# The declared-classpath gate, plus the test suite.
+#
+# Every namespace under src/ must load with NO -Sdeps override, so a namespace
+# that only compiles against an unreleased sibling working tree fails here, at
+# the commit that introduced it. hive-notify's tests need nothing outside the
+# published classpath, so the suite runs too.
+#
+# Secrets: MAVEN_USERNAME, MAVEN_TOKEN (org-wide on hive-agi), for the
+# private-registry resolution of hive-* deps.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+      MAVEN_TOKEN: ${{ secrets.MAVEN_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # The official installer, not DeLaGuardo/setup-clojure: that action calls
+      # the GitHub API with GITHUB_TOKEN, which under Gitea Actions is a Gitea
+      # token github.com rejects (see hive-knowledge release.yml).
+      - name: Setup Clojure CLI
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/clj-install.sh \
+            https://download.clojure.org/install/linux-install-1.12.4.1618.sh
+          chmod +x /tmp/clj-install.sh
+          sudo /tmp/clj-install.sh
+          clojure --version
+
+      - name: Materialize private-registry resolution credentials
+        if: env.MAVEN_TOKEN != ''
+        run: |
+          CLJ_CONFIG="${CLJ_CONFIG:-${XDG_CONFIG_HOME:+$XDG_CONFIG_HOME/clojure}}"
+          CLJ_CONFIG="${CLJ_CONFIG:-$HOME/.clojure}"
+          mkdir -p "$CLJ_CONFIG" "$HOME/.m2"
+          cat > "$CLJ_CONFIG/deps.edn" <<'EOF'
+          {:mvn/repos {"hive-gitea" {:url "https://gitea.hive-mcp.com/api/packages/hive-agi/maven"}}}
+          EOF
+          cat > "$HOME/.m2/settings.xml" <<EOF
+          <settings>
+            <servers>
+              <server>
+                <id>hive-gitea</id>
+                <username>${MAVEN_USERNAME}</username>
+                <password>${MAVEN_TOKEN}</password>
+              </server>
+            </servers>
+          </settings>
+          EOF
+
+      # No -Sdeps. That is the whole point of this step.
+      - name: Every source namespace loads on the declared classpath
+        run: clojure -M -i script/load_all.clj
+
+      - name: Test suite
+        run: clojure -M:test

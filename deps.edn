@@ -1,15 +1,24 @@
 {:paths ["src" "resources"]
+
+ ;; The private registry. Declared HERE, not only in a developer's user-level
+ ;; deps.edn, so a cold clone and CI resolve hive-agi artifacts identically.
+ ;; Credentials come from ~/.m2/settings.xml (server id "hive-gitea").
+ :mvn/repos {"hive-gitea" {:url "https://gitea.hive-mcp.com/api/packages/hive-agi/maven"}}
+
+ ;; Published pins only. For local development against sibling working trees,
+ ;; pass -Sdeps with :local/root overrides (or a gitignored local.deps.edn);
+ ;; CI's declared-classpath gate never applies them.
  :deps {org.clojure/clojure {:mvn/version "1.12.6"}
-        io.github.hive-agi/hive-spi #:local{:root "../hive-spi"}
-        io.github.hive-agi/hive-dsl #:local{:root "../hive-dsl"}}
+        io.github.hive-agi/hive-spi {:mvn/version "1.4.0"}
+        io.github.hive-agi/hive-dsl {:mvn/version "0.5.31"}}
 
  :aliases
- {
-  ;; :build — tools.build entrypoint (clojure -T:build <task>). Canonical hive
+ {;; :build — tools.build entrypoint (clojure -T:build <task>). Canonical hive
   ;; build: jar / jar-aot / install / bump / verify-license / deploy.
   :build {:deps {io.github.hive-agi/hive-build {:mvn/version "0.1.22"}}
           :ns-default hive-build.api}
-:dev  {:extra-paths ["dev" "test"]
+
+  :dev  {:extra-paths ["dev" "test"]
          :extra-deps  {org.clojure/test.check {:mvn/version "1.1.3"}}}
 
   :test {:extra-paths ["test"]
