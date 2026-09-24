@@ -4,7 +4,9 @@
    a live desktop and degrades (never throws) when the tool is absent."
   (:require [hive-spi.notify :as notify]
             [hive-notify.os :as os]
-            [hive-notify.shell :as sh]))
+            [hive-notify.shell :as sh]
+            [hive-notify.ask :as ask]
+            [clojure.string :as str]))
 
 ;; SPDX-License-Identifier: MIT
 ;; Copyright (c) 2026 hive-agi contributors
@@ -32,7 +34,26 @@
   ["osascript" "-e"
    (format "display notification \"%s\" with title \"%s\"" (str body) (str summary))])
 
-(defrecord DesktopBackend [os-kind app accept? probe run-cmd]
+(defn escape-markup
+  "Escape the characters notification servers read as body markup, so caller
+   text shows as written and cannot render links or formatting."
+  [s]
+  (-> (str s)
+      (str/replace "&" "&amp;")
+      (str/replace "<" "&lt;")
+      (str/replace ">" "&gt;")))
+
+(defn- linux-ask-args
+  "notify-send with one action button per choice; it waits and prints the chosen
+   action's id. `--` ends the options, so a summary starting with `-` stays text,
+   and the body is markup-escaped."
+  [{:keys [summary body choices] :as question} app]
+  (-> ["notify-send" "-a" app "-u" "critical" "-t" (str (ask/timeout-ms question))]
+      (into (mapcat (fn [[id label]] ["-A" (str (name id) "=" label)])) choices)
+      (conj "--" (str summary))
+      (cond-> (seq (str body)) (conj (escape-markup body)))))
+
+(defrecord DesktopBackend [os-kind app accept? probe run-cmd ask-cmd]
   notify/INotify
   (notify-id [_] :desktop)
   (backend-available? [_]
@@ -48,13 +69,31 @@
                     nil)]
       (let [{:keys [exit err]} (run-cmd args)]
         {:delivered? (= 0 exit) :backend :desktop :detail {:exit exit :err err}})
-      {:delivered? false :backend :desktop :detail {:reason :unsupported-os :os os-kind}})))
+      {:delivered? false :backend :desktop :detail {:reason :unsupported-os :os os-kind}}))
+
+  ask/IAsk
+  (ask! [_ question]
+    (cond
+      (not (ask/valid-question? question))
+      {:answer nil :backend :desktop :detail {:reason :invalid-question}}
+
+      (not= :linux os-kind)
+      {:answer nil :backend :desktop :detail {:reason :unsupported-os :os os-kind}}
+
+      :else
+      (let [{:keys [exit out timed-out?]} (ask-cmd (linux-ask-args question app)
+                                                   (ask/timeout-ms question))]
+        {:answer  (when (and (not timed-out?) (= 0 exit))
+                    (ask/answer-for (:choices question) out))
+         :backend :desktop
+         :detail  {:exit exit :timed-out? (boolean timed-out?)}}))))
 
 (defn desktop-backend
   "Build a DesktopBackend. opts (all optional): :os-kind (default detect-os),
-   :app, :accept? (event-type -> bool), :probe, :run-cmd."
+   :app, :accept? (event-type -> bool), :probe, :run-cmd, :ask-cmd
+   ((fn [args timeout-ms]) -> {:exit :out :timed-out?})."
   ([] (desktop-backend {}))
-  ([{:keys [os-kind app accept? probe run-cmd]
+  ([{:keys [os-kind app accept? probe run-cmd ask-cmd]
      :or   {os-kind (os/detect-os) app "hive" accept? default-accept
-            probe   sh/on-path? run-cmd sh/run}}]
-   (->DesktopBackend os-kind app accept? probe run-cmd)))
+            probe   sh/on-path? run-cmd sh/run ask-cmd sh/run-timed}}]
+   (->DesktopBackend os-kind app accept? probe run-cmd ask-cmd)))
