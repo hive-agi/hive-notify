@@ -29,10 +29,19 @@
        phone (conj phone)
        true  (conj (cli/cli-backend))))))
 
-(defonce ^:private backends (atom (default-backends)))
+(defonce ^:private backends (atom nil))
 
-(defn set-backends! [bs] (reset! backends (vec bs)) :ok)
-(defn current-backends [] @backends)
+(defn set-backends!
+  "Pin the active backends to `bs`. nil unpins, so each call gets a fresh
+   (default-backends)."
+  [bs]
+  (reset! backends (some-> bs vec))
+  :ok)
+(defn current-backends
+  "The pinned backends, else (default-backends) built now from the code
+   currently loaded."
+  []
+  (or @backends (default-backends)))
 
 (defn- available-and-accepts? [b event-type]
   (and (rescue false (notify/backend-available? b))
@@ -49,7 +58,7 @@
    accepts its :event-type. Never throws. Returns
      {:event-type <kw> :attempted [<backend-kw>] :delivered [<backend-kw>]
       :results [<per-backend result map>]}."
-  ([notification] (notify-fanout! @backends notification))
+  ([notification] (notify-fanout! (current-backends) notification))
   ([bs notification]
    (let [et      (:event-type notification)
          results (into [] (comp (filter #(available-and-accepts? % et))
@@ -71,7 +80,7 @@
    The remaining askers are cancelled once one answers. An invalid question, no
    capable backend, no answer before the question's timeout, or backends that
    all fail give :answer nil. Never throws."
-  ([question] (ask-first! @backends question))
+  ([question] (ask-first! (current-backends) question))
   ([bs question]
    (if-not (ask/valid-question? question)
      {:answer nil :backend nil :asked [] :detail {:reason :invalid-question}}

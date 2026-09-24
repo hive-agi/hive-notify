@@ -55,6 +55,18 @@
       (is (= [:cli] (:delivered r)))
       (is (some #(= :notify-threw (get-in % [:detail :reason])) (:results r))))))
 
+(deftest unpinned-backends-are-built-per-call-from-current-code
+  (let [pinned @#'registry/backends]
+    (try
+      (registry/set-backends! nil)
+      (is (not (identical? (first (registry/current-backends)) (first (registry/current-backends))))
+          "no instance outlives a reload: each call constructs the defaults anew")
+      (is (= :cli (notify/notify-id (last (registry/current-backends)))))
+      (let [stub (cli/cli-backend {:emit (fn [_])})]
+        (registry/set-backends! [stub])
+        (is (= [stub] (registry/current-backends)) "a pinned set is used as given"))
+      (finally (reset! @#'registry/backends pinned)))))
+
 (deftest throwing-probe-is-isolated
   (testing "a backend whose backend-available? throws is skipped, not fatal"
     (let [bad (reify notify/INotify
