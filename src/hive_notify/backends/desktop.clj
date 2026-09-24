@@ -6,7 +6,8 @@
             [hive-notify.os :as os]
             [hive-notify.shell :as sh]
             [hive-notify.ask :as ask]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [hive-notify.backends.freedesktop :as fd]))
 
 ;; SPDX-License-Identifier: MIT
 ;; Copyright (c) 2026 hive-agi contributors
@@ -53,7 +54,35 @@
       (conj "--" (str summary))
       (cond-> (seq (str body)) (conj (escape-markup body)))))
 
-(defrecord DesktopBackend [os-kind app accept? probe run-cmd ask-cmd]
+(defn notify-send-bus
+  "Ask projection over notify-send, run through `ask-cmd`
+   ((fn [args timeout-ms]) -> {:exit :out :timed-out?})."
+  [ask-cmd]
+  (fn [question app timeout-ms]
+    (let [{:keys [exit out timed-out?]} (ask-cmd (linux-ask-args question app) timeout-ms)]
+      (cond
+        timed-out?   {:status :timed-out}
+        (= 127 exit) {:status :unavailable}
+        (= 0 exit)   {:status :answered :raw out}
+        :else        {:status :failed :exit exit}))))
+
+(defn dbus-bus
+  "Ask projection over the freedesktop Notifications service on the session
+   D-Bus, in-process."
+  [question app timeout-ms]
+  (fd/ask! (update question :body escape-markup) app timeout-ms))
+
+(defn- ask-over
+  "Ask through the first projection in `buses` ([[id f] ...]) that is not
+   :unavailable. Returns [id status-map]."
+  [buses question app timeout-ms]
+  (or (some (fn [[id f]]
+              (let [r (f question app timeout-ms)]
+                (when (not= :unavailable (:status r)) [id r])))
+            buses)
+      [nil {:status :unavailable}]))
+
+(defrecord DesktopBackend [os-kind app accept? probe run-cmd ask-buses]
   notify/INotify
   (notify-id [_] :desktop)
   (backend-available? [_]
@@ -81,19 +110,25 @@
       {:answer nil :backend :desktop :detail {:reason :unsupported-os :os os-kind}}
 
       :else
-      (let [{:keys [exit out timed-out?]} (ask-cmd (linux-ask-args question app)
-                                                   (ask/timeout-ms question))]
-        {:answer  (when (and (not timed-out?) (= 0 exit))
-                    (ask/answer-for (:choices question) out))
+      (let [[bus r] (ask-over ask-buses question app (ask/timeout-ms question))]
+        {:answer  (when (= :answered (:status r))
+                    (ask/answer-for (:choices question) (:raw r)))
          :backend :desktop
-         :detail  {:exit exit :timed-out? (boolean timed-out?)}}))))
+         :detail  (-> r (dissoc :raw) (assoc :bus bus))}))))
 
 (defn desktop-backend
   "Build a DesktopBackend. opts (all optional): :os-kind (default detect-os),
-   :app, :accept? (event-type -> bool), :probe, :run-cmd, :ask-cmd
-   ((fn [args timeout-ms]) -> {:exit :out :timed-out?})."
+   :app, :accept? (event-type -> bool), :probe, :run-cmd, :ask-buses
+   ([[id (fn [question app timeout-ms])] ...], tried in order; default D-Bus
+   then notify-send), :ask-cmd ((fn [args timeout-ms]) -> {:exit :out
+   :timed-out?}). An :ask-cmd given without :ask-buses means notify-send only."
   ([] (desktop-backend {}))
-  ([{:keys [os-kind app accept? probe run-cmd ask-cmd]
+  ([{:keys [os-kind app accept? probe run-cmd ask-cmd ask-buses]
      :or   {os-kind (os/detect-os) app "hive" accept? default-accept
-            probe   sh/on-path? run-cmd sh/run ask-cmd sh/run-timed}}]
-   (->DesktopBackend os-kind app accept? probe run-cmd ask-cmd)))
+            probe   sh/on-path? run-cmd sh/run}}]
+   (->DesktopBackend os-kind app accept? probe run-cmd
+                     (or ask-buses
+                         (if ask-cmd
+                           [[:notify-send (notify-send-bus ask-cmd)]]
+                           [[:dbus dbus-bus]
+                            [:notify-send (notify-send-bus sh/run-timed)]])))))

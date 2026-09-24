@@ -123,3 +123,45 @@
                                       (dissoc question :summary))]
       (is (nil? (:answer r)))
       (is (not @called)))))
+
+(defn- bus [calls id r]
+  [id (fn [q app t] (swap! calls conj [id q app t]) r)])
+
+(deftest desktop-asks-through-the-first-available-bus
+  (let [calls (atom [])
+        b     (desktop/desktop-backend
+               {:os-kind :linux :app "hive"
+                :ask-buses [(bus calls :off {:status :unavailable})
+                            (bus calls :on {:status :answered :raw "yes"})
+                            (bus calls :never {:status :answered :raw "no"})]})
+        r     (ask/ask! b question)]
+    (is (= :yes (:answer r)))
+    (is (= :on (get-in r [:detail :bus])))
+    (is (= [:off :on] (mapv first @calls)) "stops at the first bus that is not :unavailable")
+    (is (= [question "hive" 500] (rest (second @calls))))))
+
+(deftest desktop-bus-outcomes-without-a-choice-give-no-answer
+  (doseq [r [{:status :dismissed :reason 2} {:status :timed-out}
+             {:status :failed :exit 1} {:status :answered :raw "maybe"}]]
+    (let [b (desktop/desktop-backend {:os-kind :linux :ask-buses [(bus (atom []) :x r)]})]
+      (is (nil? (:answer (ask/ask! b question))) (pr-str r))))
+  (let [b (desktop/desktop-backend {:os-kind :linux
+                                    :ask-buses [(bus (atom []) :x {:status :unavailable})]})]
+    (is (= {:answer nil :backend :desktop :detail {:status :unavailable :bus nil}}
+           (ask/ask! b question)))))
+
+(deftest dbus-bus-sends-an-escaped-body
+  (let [seen (atom nil)]
+    (with-redefs [hive-notify.backends.freedesktop/ask!
+                  (fn [q app t] (reset! seen [q app t]) {:status :answered :raw "yes"})]
+      (is (= {:status :answered :raw "yes"}
+             (desktop/dbus-bus (assoc question :body "<b>x</b> & y") "hive" 500))))
+    (is (= ["&lt;b&gt;x&lt;/b&gt; &amp; y" "hive" 500]
+           [(:body (first @seen)) (second @seen) (nth @seen 2)]))))
+
+(deftest notify-send-bus-maps-exits-to-status
+  (doseq [[out want] [[{:exit 0 :out "no\n" :timed-out? false} {:status :answered :raw "no\n"}]
+                      [{:exit -1 :out "" :timed-out? true}    {:status :timed-out}]
+                      [{:exit 127 :out "" :timed-out? false}  {:status :unavailable}]
+                      [{:exit 1 :out "" :timed-out? false}    {:status :failed :exit 1}]]]
+    (is (= want ((desktop/notify-send-bus (constantly out)) question "hive" 500)))))
