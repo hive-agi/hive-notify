@@ -10,20 +10,24 @@
             [hive-notify.backends.cli :as cli]
             [hive-notify.backends.widget :as widget]
             [hive-dsl.result :refer [rescue]]
-            [hive-notify.ask :as ask]))
+            [hive-notify.ask :as ask]
+            [hive-notify.backends.ntfy :as ntfy]))
 
 ;; SPDX-License-Identifier: MIT
 ;; Copyright (c) 2026 hive-agi contributors
 
 (defn default-backends
   "The core backend set for `os-kind` (default detect-os): desktop, sound,
-   widget, and the always-available cli fallback last."
+   widget, ntfy when configured (see hive-notify.backends.ntfy/config-file),
+   and the always-available cli fallback last."
   ([] (default-backends (os/detect-os)))
   ([os-kind]
-   [(desktop/desktop-backend {:os-kind os-kind})
-    (sound/sound-backend {:os-kind os-kind})
-    (widget/widget-backend)
-    (cli/cli-backend)]))
+   (let [phone (ntfy/configured-backend)]
+     (cond-> [(desktop/desktop-backend {:os-kind os-kind})
+              (sound/sound-backend {:os-kind os-kind})
+              (widget/widget-backend)]
+       phone (conj phone)
+       true  (conj (cli/cli-backend))))))
 
 (defonce ^:private backends (atom (default-backends)))
 
