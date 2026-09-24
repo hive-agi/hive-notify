@@ -1,0 +1,6 @@
+{:project-id "hive-notify"
+ :parent "hive"
+ :description "HWF2-M6 notification lib: INotify backends (desktop/sound/cli/widget), OS detection, notify-fanout! registry, and NotifySink projecting :workflow/* events into notifications. Deps hive-spi + hive-dsl only; reaches Emacs/host at runtime."
+ :language :clojure
+ :tags ["hive-notify" "hwf2" "notify" "backends" "milestone:M6"] 
+ :carto {:source-roots ["src" "test"]}}
