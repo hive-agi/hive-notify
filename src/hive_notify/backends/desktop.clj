@@ -5,7 +5,8 @@
   (:require [hive-spi.notify :as notify]
             [hive-notify.os :as os]
             [hive-notify.shell :as sh]
-            [hive-notify.ask :as ask]))
+            [hive-notify.ask :as ask]
+            [clojure.string :as str]))
 
 ;; SPDX-License-Identifier: MIT
 ;; Copyright (c) 2026 hive-agi contributors
@@ -33,14 +34,24 @@
   ["osascript" "-e"
    (format "display notification \"%s\" with title \"%s\"" (str body) (str summary))])
 
+(defn escape-markup
+  "Escape the characters notification servers read as body markup, so caller
+   text shows as written and cannot render links or formatting."
+  [s]
+  (-> (str s)
+      (str/replace "&" "&amp;")
+      (str/replace "<" "&lt;")
+      (str/replace ">" "&gt;")))
+
 (defn- linux-ask-args
   "notify-send with one action button per choice; it waits and prints the chosen
-   action's id. `--` ends the options, so a summary starting with `-` stays text."
+   action's id. `--` ends the options, so a summary starting with `-` stays text,
+   and the body is markup-escaped."
   [{:keys [summary body choices] :as question} app]
   (-> ["notify-send" "-a" app "-u" "critical" "-t" (str (ask/timeout-ms question))]
       (into (mapcat (fn [[id label]] ["-A" (str (name id) "=" label)])) choices)
       (conj "--" (str summary))
-      (cond-> (seq (str body)) (conj (str body)))))
+      (cond-> (seq (str body)) (conj (escape-markup body)))))
 
 (defrecord DesktopBackend [os-kind app accept? probe run-cmd ask-cmd]
   notify/INotify

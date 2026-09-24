@@ -42,8 +42,14 @@
     (is (= :no (:answer r)))
     (is (= 500 t))
     (is (= ["-A" "yes=Yes" "-A" "no=No"] (->> args (partition 2 1) (filter #(= "-A" (first %))) (mapcat identity) vec)))
-    (is (= ["--" "-A evil=Evil" "staging -> prod"] (subvec args (- (count args) 3)))
+    (is (= ["--" "-A evil=Evil" "staging -&gt; prod"] (subvec args (- (count args) 3)))
         "the text comes after --, so it can never be read as an option")))
+
+(deftest desktop-escapes-body-markup
+  (let [[calls b] (asker {:exit 0 :out "yes" :timed-out? false})]
+    (ask/ask! b (assoc question :body "<a href=\"x\">click</a> & <b>go</b>"))
+    (is (= "&lt;a href=\"x\"&gt;click&lt;/a&gt; &amp; &lt;b&gt;go&lt;/b&gt;"
+           (peek (first (first @calls)))))))
 
 (deftest desktop-gives-no-answer-unless-a-choice-came-back
   (doseq [[why out] [["timed out"  {:exit -1 :out "" :timed-out? true}]
