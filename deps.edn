@@ -12,8 +12,8 @@
         io.github.hive-agi/hive-spi {:mvn/version "1.4.1"}
         io.github.hive-agi/hive-dsl {:mvn/version "0.5.33"}
         ;; In-process freedesktop D-Bus (pure JDK unix socket, no JNI).
-        com.github.hypfvieh/dbus-java-core {:mvn/version "5.2.0"}
-        com.github.hypfvieh/dbus-java-transport-native-unixsocket {:mvn/version "5.2.0"}}
+        com.github.hypfvieh/dbus-java-core {:mvn/version "5.2.1"}
+        com.github.hypfvieh/dbus-java-transport-native-unixsocket {:mvn/version "5.2.1"}}
 
  :aliases
  {;; :build — tools.build entrypoint (clojure -T:build <task>). Canonical hive
