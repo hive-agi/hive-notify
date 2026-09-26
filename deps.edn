@@ -9,8 +9,8 @@
  ;; pass -Sdeps with :local/root overrides (or a gitignored local.deps.edn);
  ;; CI's declared-classpath gate never applies them.
  :deps {org.clojure/clojure {:mvn/version "1.12.6"}
-        io.github.hive-agi/hive-spi {:mvn/version "1.4.0"}
-        io.github.hive-agi/hive-dsl {:mvn/version "0.5.31"}
+        io.github.hive-agi/hive-spi {:mvn/version "1.4.1"}
+        io.github.hive-agi/hive-dsl {:mvn/version "0.5.33"}
         ;; In-process freedesktop D-Bus (pure JDK unix socket, no JNI).
         com.github.hypfvieh/dbus-java-core {:mvn/version "5.2.0"}
         com.github.hypfvieh/dbus-java-transport-native-unixsocket {:mvn/version "5.2.0"}}
@@ -18,7 +18,7 @@
  :aliases
  {;; :build — tools.build entrypoint (clojure -T:build <task>). Canonical hive
   ;; build: jar / jar-aot / install / bump / verify-license / deploy.
-  :build {:deps {io.github.hive-agi/hive-build {:mvn/version "0.1.22"}}
+  :build {:deps {io.github.hive-agi/hive-build {:mvn/version "0.1.24"}}
           :ns-default hive-build.api}
 
   :dev  {:extra-paths ["dev" "test"]
