@@ -20,21 +20,24 @@
   (rescue {:exit 127 :err "exec-failed"} (apply shell/sh args)))
 
 (defn run-timed
-  "Run `args` (a vector of strings) with a deadline. Never throws. Returns
-   {:exit :out :err :timed-out?}. The process is destroyed when the deadline
-   passes or the calling thread is interrupted, so a caller that stops waiting
-   leaves no process behind."
-  [args timeout-ms]
-  (rescue {:exit 127 :out "" :err "exec-failed" :timed-out? false}
-    (let [p   (.start (ProcessBuilder. ^java.util.List (mapv str args)))
-          out (future (slurp (.getInputStream p)))
-          err (future (slurp (.getErrorStream p)))]
-      (try
-        (if (.waitFor p (long timeout-ms) TimeUnit/MILLISECONDS)
-          {:exit (.exitValue p) :out @out :err @err :timed-out? false}
-          (do (.destroyForcibly p)
-              {:exit -1 :out "" :err "" :timed-out? true}))
-        (catch InterruptedException _
-          (.destroyForcibly p)
-          (.interrupt (Thread/currentThread))
-          {:exit -1 :out "" :err "" :timed-out? true})))))
+  "Run `args` (a vector of strings) with a deadline, writing `input` (a string,
+   optional) to its stdin. Never throws. Returns {:exit :out :err :timed-out?}.
+   The process is destroyed when the deadline passes or the calling thread is
+   interrupted, so a caller that stops waiting leaves no process behind."
+  ([args timeout-ms] (run-timed args timeout-ms nil))
+  ([args timeout-ms input]
+   (rescue {:exit 127 :out "" :err "exec-failed" :timed-out? false}
+     (let [p   (.start (ProcessBuilder. ^java.util.List (mapv str args)))
+           _   (with-open [w (java.io.OutputStreamWriter. (.getOutputStream p) "UTF-8")]
+                 (when input (.write w ^String input)))
+           out (future (slurp (.getInputStream p)))
+           err (future (slurp (.getErrorStream p)))]
+       (try
+         (if (.waitFor p (long timeout-ms) TimeUnit/MILLISECONDS)
+           {:exit (.exitValue p) :out @out :err @err :timed-out? false}
+           (do (.destroyForcibly p)
+               {:exit -1 :out "" :err "" :timed-out? true}))
+         (catch InterruptedException _
+           (.destroyForcibly p)
+           (.interrupt (Thread/currentThread))
+           {:exit -1 :out "" :err "" :timed-out? true}))))))
