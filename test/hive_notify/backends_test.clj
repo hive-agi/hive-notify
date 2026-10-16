@@ -1,6 +1,8 @@
 (ns hive-notify.backends-test
   "INotify contract + per-backend behaviour with injected probes/runners."
   (:require [clojure.test :refer [deftest is testing]]
+            [clojure.test.check.generators :as gen]
+            [hive-test.trifecta :refer [deftrifecta]]
             [hive-spi.notify :as notify]
             [hive-notify.backends.desktop :as desktop]
             [hive-notify.backends.sound :as sound]
@@ -23,7 +25,26 @@
     (let [r (notify/notify! b {:event-type :workflow/failed :summary "s" :body "b" :level :error})]
       (is (:delivered? r))
       (is (= :desktop (:backend r)))
-      (is (= "notify-send" (ffirst @calls))))))
+      (is (= ["--" "s" "b"] (take-last 3 (first @calls)))))))
+
+(defn- notification-command [[os-kind summary body]]
+  (let [seen (atom nil)
+        backend (desktop/desktop-backend
+                 {:os-kind os-kind :run-cmd (fn [args] (reset! seen args) {:exit 0})})]
+    (notify/notify! backend {:summary summary :body body :level :info})
+    @seen))
+
+(deftrifecta desktop-notification-command-trifecta
+  #'notification-command
+  {:golden-path "test/golden/desktop-notification-command.edn"
+   :cases {:linux [:linux "-title" "<a>&"]
+           :macos [:macos "a\"b\\c" "body\nnext"]}
+   :gen (gen/fmap (fn [s] [:linux (str "-" s) (str "<" s "&")])
+                  gen/string-alphanumeric)
+   :pred (fn [args] (and (= "notify-send" (first args))
+                          (= "--" (nth args (- (count args) 3)))
+                          (.contains ^String (last args) "&lt;")))
+   :mutations [["drops-command" (constantly [])]]})
 
 (deftest desktop-not-delivered-on-nonzero-exit
   (let [b (desktop/desktop-backend {:os-kind :linux :probe (constantly true)

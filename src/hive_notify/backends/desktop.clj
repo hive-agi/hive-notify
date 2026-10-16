@@ -24,16 +24,27 @@
   {:info "dialog-information" :warn "dialog-warning"
    :error "dialog-error" :success "dialog-information"})
 
+(declare escape-markup)
+
 (defn- linux-args [{:keys [summary body level]} app]
   (cond-> ["notify-send" "-a" app
            "-u" (level->urgency level "normal")
            "-i" (level->icon level "dialog-information")
-           (str summary)]
-    (seq (str body)) (conj (str body))))
+           "--" (str summary)]
+    (seq (str body)) (conj (escape-markup body))))
+
+(defn- applescript-string [s]
+  (str "\"" (-> (str s)
+                 (str/replace "\\" "\\\\")
+                 (str/replace "\"" "\\\"")
+                 (str/replace "\r\n" "\n")
+                 (str/replace "\r" "\n")
+                 (str/replace "\n" "\" & linefeed & \"")) "\""))
 
 (defn- macos-args [{:keys [summary body]}]
   ["osascript" "-e"
-   (format "display notification \"%s\" with title \"%s\"" (str body) (str summary))])
+   (format "display notification %s with title %s"
+           (applescript-string body) (applescript-string summary))])
 
 (defn escape-markup
   "Escape the characters notification servers read as body markup, so caller
