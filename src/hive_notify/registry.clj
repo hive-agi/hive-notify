@@ -72,8 +72,13 @@
       :delivered  (mapv :backend (filter :delivered? results))
       :results    results})))
 
-(defn- asker? [b]
+(defn- asker?
+  "True when `b` can ask `question` now: it implements IAsk, takes the
+   question's kind (a :text question skips button-only backends instead of
+   holding a buttonless notification open) and is available."
+  [question b]
   (and (satisfies? ask/IAsk b)
+       (rescue false (ask/can-ask? b question))
        (rescue false (notify/backend-available? b))))
 
 (defn ask-first!
@@ -87,7 +92,7 @@
   ([bs question]
    (if-not (ask/valid-question? question)
      {:answer nil :backend nil :asked [] :detail {:reason :invalid-question}}
-     (let [askers (filterv asker? bs)
+     (let [askers (filterv (partial asker? question) bs)
            first! (promise)
            futs   (mapv (fn [b]
                           (future
