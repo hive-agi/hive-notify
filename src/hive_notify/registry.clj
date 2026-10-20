@@ -11,21 +11,24 @@
             [hive-notify.backends.widget :as widget]
             [hive-dsl.result :refer [rescue]]
             [hive-notify.ask :as ask]
-            [hive-notify.backends.ntfy :as ntfy]))
+            [hive-notify.backends.ntfy :as ntfy]
+            [hive-notify.backends.dialog :as dialog]))
 
 ;; SPDX-License-Identifier: MIT
 ;; Copyright (c) 2026 hive-agi contributors
 
 (defn default-backends
   "The core backend set for `os-kind` (default detect-os): desktop, sound,
-   widget, ntfy when configured (see hive-notify.backends.ntfy/config-file),
-   and the always-available cli fallback last."
+   widget, dialog (asks through a clickable window), ntfy when configured (see
+   hive-notify.backends.ntfy/config-file), and the always-available cli
+   fallback last."
   ([] (default-backends (os/detect-os)))
   ([os-kind]
    (let [phone (ntfy/configured-backend)]
      (cond-> [(desktop/desktop-backend {:os-kind os-kind})
               (sound/sound-backend {:os-kind os-kind})
-              (widget/widget-backend)]
+              (widget/widget-backend)
+              (dialog/dialog-backend)]
        phone (conj phone)
        true  (conj (cli/cli-backend))))))
 
@@ -69,8 +72,13 @@
       :delivered  (mapv :backend (filter :delivered? results))
       :results    results})))
 
-(defn- asker? [b]
+(defn- asker?
+  "True when `b` can ask `question` now: it implements IAsk, takes the
+   question's kind (a :text question skips button-only backends instead of
+   holding a buttonless notification open) and is available."
+  [question b]
   (and (satisfies? ask/IAsk b)
+       (rescue false (ask/can-ask? b question))
        (rescue false (notify/backend-available? b))))
 
 (defn ask-first!
@@ -84,7 +92,7 @@
   ([bs question]
    (if-not (ask/valid-question? question)
      {:answer nil :backend nil :asked [] :detail {:reason :invalid-question}}
-     (let [askers (filterv asker? bs)
+     (let [askers (filterv (partial asker? question) bs)
            first! (promise)
            futs   (mapv (fn [b]
                           (future

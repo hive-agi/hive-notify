@@ -1,0 +1,15 @@
+{:linux
+ ["notify-send"
+  "-a"
+  "hive"
+  "-u"
+  "normal"
+  "-i"
+  "dialog-information"
+  "--"
+  "-title"
+  "&lt;a&gt;&amp;"],
+ :macos
+ ["osascript"
+  "-e"
+  "display notification \"body\" & linefeed & \"next\" with title \"a\\\"b\\\\c\""]}
