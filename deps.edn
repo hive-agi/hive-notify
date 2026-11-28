@@ -1,4 +1,4 @@
-{:paths ["src"]
+{:paths ["src" "resources"]
 
  ;; The private registry. Declared HERE, not only in a developer's user-level
  ;; deps.edn, so a cold clone and CI resolve hive-agi artifacts identically.
@@ -27,9 +27,9 @@
           :ns-default hive-build.api}
 
   ;; :cljs -- ClojureScript toolchain, used ONLY to compile the GTK4/GJS ask
-  ;; inbox helper (src-cljs/ -> src/hive_notify/ask_inbox.js). Not on the
-  ;; production classpath; the compiled artifact is checked in, so neither this
-  ;; alias nor ClojureScript is needed at runtime. Compile with:
+  ;; inbox helper (src-cljs/ -> resources/hive_notify/ask_inbox.js). Not on the
+  ;; production classpath; the compiled artifact is checked in under resources/,
+  ;; so neither this alias nor ClojureScript is needed at runtime. Compile with:
   ;;   clojure -M:cljs -i script/compile_ask_inbox.clj
   :cljs {:extra-paths ["src-cljs"]
          :extra-deps  {org.clojure/clojurescript {:mvn/version "1.12.134"}}}
