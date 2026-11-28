@@ -1,4 +1,4 @@
-{:paths ["src"]
+{:paths ["src" "resources"]
 
  ;; The private registry. Declared HERE, not only in a developer's user-level
  ;; deps.edn, so a cold clone and CI resolve hive-agi artifacts identically.
@@ -13,7 +13,12 @@
         io.github.hive-agi/hive-dsl {:mvn/version "0.6.2"}
         ;; In-process freedesktop D-Bus (pure JDK unix socket, no JNI).
         com.github.hypfvieh/dbus-java-core {:mvn/version "5.2.2"}
-        com.github.hypfvieh/dbus-java-transport-native-unixsocket {:mvn/version "5.2.2"}}
+        com.github.hypfvieh/dbus-java-transport-native-unixsocket {:mvn/version "5.2.2"}
+        ;; Markdown → styled spans for the Ask inbox (see hive-notify.markup).
+        ;; CommonMark AST only; the GTK side never sees Markdown source.
+        org.commonmark/commonmark {:mvn/version "0.24.0"}
+        ;; JSON lexing for fenced ```json blocks.
+        org.clojure/data.json {:mvn/version "2.5.2"}}
 
  :aliases
  {;; :build — tools.build entrypoint (clojure -T:build <task>). Canonical hive
