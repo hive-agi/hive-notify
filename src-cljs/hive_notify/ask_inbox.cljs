@@ -381,7 +381,8 @@
     (.append box row)))
 
 (defn- render-choice-answer! [ask box already-sent]
-  (let [choices (choice-pairs ask)]
+  ;; `ask` is already normalized: :choices is a CLJS vector of [id label].
+  (let [choices (:choices ask)]
     (when (pos? (count choices))
       ;; Eight long labels must stay usable: a bounded, vertically scrolling
       ;; stack, each button full width with a wrapped, left-aligned label.
@@ -428,7 +429,9 @@
         (when ask
           (apply-body! buffer
                        (into [{:text (str (:summary ask) "\n\n") :styles ["heading"]}]
-                             (spans-of (:body ask))))))
+                             ;; `ask` is already normalized: :body is a CLJS
+                             ;; vector of {:text .. :styles ..} spans.
+                             (:body ask)))))
       (render-answer! ask)
       (.idle_add GLib GLib.PRIORITY_DEFAULT_IDLE
                  (fn []
