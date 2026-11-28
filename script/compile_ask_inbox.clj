@@ -24,7 +24,7 @@
 
 (def ^:private src-dir "src-cljs")
 (def ^:private out-dir "target/cljs-ask-inbox")
-(def ^:private out-file "src/hive_notify/ask_inbox.js")
+(def ^:private out-file "resources/hive_notify/ask_inbox.js")
 
 (b/build src-dir
          {:main 'hive-notify.ask-inbox
