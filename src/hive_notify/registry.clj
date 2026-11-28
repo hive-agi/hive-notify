@@ -12,7 +12,8 @@
             [hive-dsl.result :refer [rescue]]
             [hive-notify.ask :as ask]
             [hive-notify.backends.ntfy :as ntfy]
-            [hive-notify.backends.dialog :as dialog]))
+            [hive-notify.backends.dialog :as dialog]
+            [hive-notify.inbox :as inbox]))
 
 ;; SPDX-License-Identifier: MIT
 ;; Copyright (c) 2026 hive-agi contributors
@@ -28,7 +29,7 @@
      (cond-> [(desktop/desktop-backend {:os-kind os-kind})
               (sound/sound-backend {:os-kind os-kind})
               (widget/widget-backend)
-              (dialog/dialog-backend)]
+              (inbox/backend (dialog/dialog-backend))]
        phone (conj phone)
        true  (conj (cli/cli-backend))))))
 
@@ -100,9 +101,14 @@
                               (when (:answer r) (deliver first! r))
                               r)))
                         askers)
-           _      (future (doseq [f futs] (rescue nil @f)) (deliver first! nil))
-           r      (deref first! (+ (ask/timeout-ms question) 1000) nil)]
-       (doseq [f futs] (future-cancel f))
-       {:answer  (:answer r)
-        :backend (:backend r)
-        :asked   (mapv #(rescue :unknown (notify/notify-id %)) askers)}))))
+           joined (future (doseq [f futs] (rescue nil @f)) (deliver first! nil))
+           asked  (mapv #(rescue :unknown (notify/notify-id %)) askers)]
+       (try
+         (let [r (deref first! (+ (ask/timeout-ms question) 1000) nil)]
+           {:answer (:answer r) :backend (:backend r) :asked asked})
+         (catch InterruptedException interrupted
+           (.interrupt (Thread/currentThread))
+           {:answer nil :backend nil :asked asked :detail {:reason :interrupted}})
+         (finally
+           (future-cancel joined)
+           (doseq [f futs] (future-cancel f))))))))
